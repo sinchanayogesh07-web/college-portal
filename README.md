@@ -1,20 +1,19 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# NexPlacement Campus Placement Portal
 
-# Run and deploy your AI Studio app
+The client is a single-page AngularJS 1.8 application built with semantic HTML, CSS, and JavaScript. The existing Express API and optional MongoDB persistence remain in place.
 
-This contains everything you need to run your app locally.
+## Run locally
 
-View your app in AI Studio: https://ai.studio/apps/45c2e6b4-778f-483e-9ca6-828928a153af
+1. Install the project dependencies with `npm install`.
+2. Optionally set `MONGODB_URI` in `.env` to enable MongoDB persistence. Without it, the server uses its in-memory data store.
+3. Start the app with `npm run dev`.
+4. Open `http://localhost:3000`.
 
-## Run Locally
+AngularJS is loaded from the Google Hosted Libraries CDN. The frontend calls the Express API at `/api`.
 
-**Prerequisites:**  Node.js
+## Production build
 
+- `npm run build` creates the static client in `dist`.
+- `npm start` starts the Express server. Set `NODE_ENV=production` to serve the built client.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+The portal includes student drive search and applications, interview booking, profile and resume management, and coordinator tools for drives, applicants, interview slots, and placement analytics.

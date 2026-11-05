@@ -1,21 +1,287 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" ng-app="placementPortal">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Campus Placement Cell Portal</title>
-    <meta name="description" content="Comprehensive university campus placement portal for students to upload resumes, track job applications, and schedule interview slots with full-stack Node.js and MongoDB support." />
-    <meta property="og:title" content="Campus Placement Cell Portal" />
-    <meta property="og:description" content="Comprehensive university campus placement portal for students to upload resumes, track job applications, and schedule interview slots with full-stack Node.js and MongoDB support." />
-    <meta property="og:type" content="website" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <meta name="description" content="Campus placement portal for students and placement coordinators." />
+    <title>NexPlacement | Campus Placement Portal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/index.css" />
   </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+  <body ng-controller="PortalController as portal">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <button class="brand" ng-click="portal.goTo('drives')" aria-label="NexPlacement home">
+          <span class="brand-icon">N</span>
+          <span>NexPlacement</span>
+        </button>
+        <nav class="main-nav" aria-label="Main navigation">
+          <button ng-class="{active: portal.activeTab === 'drives'}" ng-click="portal.goTo('drives')">Campus Drives</button>
+          <button ng-class="{active: portal.activeTab === 'applications'}" ng-click="portal.goTo('applications')">My Applications <span class="nav-count" ng-if="portal.applications.length">({{portal.applications.length}})</span></button>
+          <button ng-class="{active: portal.activeTab === 'interviews'}" ng-click="portal.goTo('interviews')">Interview Slots <span class="nav-dot" ng-if="portal.upcomingInterviewCount()"></span></button>
+          <button ng-class="{active: portal.activeTab === 'resume'}" ng-click="portal.goTo('resume')">Resume &amp; ATS</button>
+          <button ng-if="portal.userRole === 'coordinator'" ng-class="{active: portal.activeTab === 'tpo'}" ng-click="portal.goTo('tpo')">TPO Console</button>
+        </nav>
+        <div class="topbar-actions">
+          <button class="button button-muted deploy-button" ng-click="portal.deployModalOpen = true">Deploy Guide</button>
+          <div class="role-switch" aria-label="Choose user role">
+            <button ng-class="{selected: portal.userRole === 'student'}" ng-click="portal.setRole('student')">Student</button>
+            <button ng-class="{selected: portal.userRole === 'coordinator'}" ng-click="portal.setRole('coordinator')">TPO Officer</button>
+          </div>
+          <button class="avatar-button" ng-if="portal.profile && portal.userRole === 'student'" ng-click="portal.goTo('resume')" title="{{portal.profile.name}}">
+            <img ng-src="{{portal.profile.avatarUrl || '/images/student_avatar_1793863944480.jpg'}}" alt="" />
+          </button>
+          <img class="avatar-image" ng-if="portal.userRole === 'coordinator'" src="/images/director_avatar_1793863944316.jpg" alt="Placement director" />
+        </div>
+      </div>
+    </header>
+
+    <div class="toast" role="status" ng-if="portal.notice" ng-class="{'toast-error': portal.noticeType === 'error'}">{{portal.notice}}</div>
+
+    <main class="page-container">
+      <div class="loading-state" ng-if="portal.loading">
+        <span class="spinner"></span>
+        <span>Connecting to Placement Portal API...</span>
+      </div>
+
+      <section ng-if="!portal.loading && portal.activeTab === 'drives'">
+        <div class="hero">
+          <img src="/images/campus_tech_hub_1793863944208.jpg" alt="" />
+          <div class="hero-content">
+            <p class="eyebrow">Campus Placement Season 2026 · Batch of 2026</p>
+            <h1>Find your dream career opportunities</h1>
+            <p class="hero-copy">Explore verified campus recruitment drives, check eligibility, apply with your resume, and manage interview schedules.</p>
+            <div class="hero-stats">
+              <div><span>Total active drives</span><strong>{{portal.jobs.length}}</strong></div>
+              <div><span>Your CGPA</span><strong>{{portal.profile.cgpa || '—'}}</strong></div>
+              <div><span>Registered branch</span><strong>{{portal.profile.branch || '—'}}</strong></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="filter-panel">
+          <input class="search-input" type="search" ng-model="portal.driveSearch" placeholder="Search company, role, location, or skill..." aria-label="Search campus drives" />
+          <div class="segmented">
+            <button ng-repeat="type in portal.jobTypes" ng-class="{selected: portal.driveType === type}" ng-click="portal.driveType = type">{{type}}</button>
+          </div>
+          <label class="check-filter"><input type="checkbox" ng-model="portal.onlyEligible" /> Eligible for me</label>
+        </div>
+
+        <div class="empty-state" ng-if="!portal.filteredJobs().length">
+          <h2>No matching campus drives found</h2>
+          <p>Try changing your search or eligibility filters.</p>
+          <button class="button button-primary" ng-click="portal.resetDriveFilters()">Reset filters</button>
+        </div>
+        <div class="card-grid" ng-if="portal.filteredJobs().length">
+          <article class="drive-card" ng-repeat="job in portal.filteredJobs() track by job.id" ng-click="portal.openDrive(job)" tabindex="0" role="button">
+            <div class="card-heading">
+              <span class="company-mark">{{portal.initials(job.companyName)}}</span>
+              <span class="status-pill" ng-class="portal.statusClass(job.status)">{{job.status}}</span>
+            </div>
+            <p class="company-name">{{job.companyName}}</p>
+            <h2>{{job.role}}</h2>
+            <p class="muted">{{job.jobType}} · {{job.workMode}}</p>
+            <div class="drive-facts">
+              <span><b>Package</b>{{job.ctc}}</span>
+              <span><b>Location</b>{{job.location}}</span>
+              <span><b>Min. CGPA</b>{{job.minCgpa}}</span>
+              <span><b>Deadline</b>{{job.deadline | date:'MMM d, yyyy'}}</span>
+            </div>
+            <div class="tag-list"><span class="tag" ng-repeat="tag in job.tags | limitTo:3">{{tag}}</span></div>
+            <div class="card-footer">
+              <span ng-if="portal.applicationFor(job.id)" class="status-text">Applied · {{portal.applicationFor(job.id).status}}</span>
+              <span ng-if="!portal.applicationFor(job.id)" ng-class="{'eligibility-warning': !portal.isEligible(job)}">{{portal.isEligible(job) ? 'Eligible to apply' : 'Check eligibility'}}</span>
+              <span class="text-link">View details →</span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section ng-if="!portal.loading && portal.activeTab === 'applications'">
+        <div class="section-header">
+          <div><p class="eyebrow">Placement Cell Application Tracking System</p><h1>My campus applications</h1><p class="muted">Monitor evaluation stages, schedule interviews, and review job offers.</p></div>
+          <div class="segmented">
+            <button ng-repeat="filter in portal.applicationFilters" ng-class="{selected: portal.applicationFilter === filter}" ng-click="portal.applicationFilter = filter">{{filter}} <span>({{portal.applicationCount(filter)}})</span></button>
+          </div>
+        </div>
+        <div class="empty-state" ng-if="!portal.filteredApplications().length">
+          <h2>No applications in this category</h2><p>Browse active placement drives and apply to get started.</p>
+          <button class="button button-primary" ng-click="portal.goTo('drives')">Explore active drives</button>
+        </div>
+        <article class="application-card" ng-repeat="app in portal.filteredApplications() track by app.id">
+          <div class="application-heading">
+            <div><p class="company-name">{{app.companyName}} <span class="muted">· Applied {{app.appliedAt | date:'MMM d, yyyy'}}</span></p><h2>{{app.jobRole}}</h2></div>
+            <span class="status-pill" ng-class="portal.statusClass(app.status)">{{app.status}}</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-stage" ng-repeat="stage in portal.statusStages">
+              <span class="stage-dot" ng-class="{complete: portal.stageIndex(app.status) >= $index}">{{$index + 1}}</span><span>{{stage}}</span>
+            </div>
+          </div>
+          <div class="application-details" ng-if="app.interviewDate || app.offerDetails">
+            <span ng-if="app.interviewDate">Interview: {{app.interviewDate | date:'MMM d, yyyy'}} {{app.interviewTime}} <a ng-if="app.interviewMeetingLink" ng-href="{{app.interviewMeetingLink}}" target="_blank" rel="noopener">Join meeting</a></span>
+            <span ng-if="app.offerDetails">Offer: {{app.offerDetails.ctc}} · joining {{app.offerDetails.joiningDate | date:'MMM d, yyyy'}}</span>
+          </div>
+          <div class="card-actions">
+            <button class="button button-muted" ng-if="app.status === 'Shortlisted'" ng-click="portal.scheduleFor(app.jobId)">Choose interview slot</button>
+            <button class="button button-primary" ng-if="app.status === 'Offer Extended'" ng-click="portal.acceptOffer(app)">Accept offer</button>
+          </div>
+        </article>
+      </section>
+
+      <section ng-if="!portal.loading && portal.activeTab === 'interviews'">
+        <div class="section-header"><div><p class="eyebrow">Interview Slot Scheduling Console</p><h1>Campus interview slots</h1><p class="muted">Select interview times for shortlisted drives. Slots are synchronized with the placement office.</p></div></div>
+        <div class="notice-panel success-panel" ng-if="portal.myBookedSlots().length">
+          <h2>Your confirmed interviews ({{portal.myBookedSlots().length}})</h2>
+          <article class="slot-card" ng-repeat="slot in portal.myBookedSlots()">
+            <div><strong>{{slot.companyName}} · {{slot.roundName}}</strong><p>{{slot.date | date:'EEE, MMM d, yyyy'}} · {{slot.startTime}}–{{slot.endTime}}</p><p>{{slot.interviewerName}} · {{slot.roomNumber}}</p></div>
+            <div class="card-actions"><a class="button button-primary" ng-if="slot.meetingLink" ng-href="{{slot.meetingLink}}" target="_blank" rel="noopener">Join meeting</a><button class="button button-muted" ng-click="portal.cancelSlot(slot)">Release slot</button></div>
+          </article>
+        </div>
+        <div class="filter-panel">
+          <label class="field-inline">Company
+            <select ng-model="portal.slotCompany"><option value="All">All companies</option><option ng-repeat="company in portal.slotCompanies()" value="{{company}}">{{company}}</option></select>
+          </label>
+          <button class="button button-primary" ng-if="portal.userRole === 'coordinator'" ng-click="portal.goTo('tpo')">Create interview slots</button>
+        </div>
+        <div class="empty-state" ng-if="!portal.filteredSlots().length"><h2>No interview slots available</h2><p>Placement coordinators publish slots once candidate screening concludes.</p></div>
+        <article class="slot-card" ng-repeat="slot in portal.filteredSlots() track by slot.id">
+          <div><p class="company-name">{{slot.companyName}} · {{slot.roundName}}</p><h2>{{slot.date | date:'EEE, MMM d, yyyy'}} · {{slot.startTime}}–{{slot.endTime}}</h2><p class="muted">{{slot.durationMinutes}} min · {{slot.interviewerName}} ({{slot.interviewerRole}}) <span ng-if="slot.roomNumber">· {{slot.roomNumber}}</span></p></div>
+          <span class="status-text" ng-if="slot.isBooked && slot.bookedByStudentId === portal.profile.id">Booked by you</span>
+          <span class="muted" ng-if="slot.isBooked && slot.bookedByStudentId !== portal.profile.id">Reserved</span>
+          <button class="button button-primary" ng-if="!slot.isBooked" ng-click="portal.bookSlot(slot)">Book this slot</button>
+        </article>
+      </section>
+
+      <section ng-if="!portal.loading && portal.activeTab === 'resume'">
+        <div class="section-header"><div><p class="eyebrow">Student Profile &amp; Resume Intelligence</p><h1>Verified placement resume</h1><p class="muted">Keep your profile and resume details updated for campus applications.</p></div><div class="card-actions"><button class="button button-muted" ng-click="portal.toggleProfileEdit()">{{portal.editingProfile ? 'Cancel editing' : 'Edit credentials'}}</button><button class="button button-primary" ng-click="portal.printResume()">Print / Save PDF</button></div></div>
+        <div class="resume-grid" ng-if="portal.profile">
+          <section class="panel">
+            <h2>Upload new resume</h2><p class="muted">PDF or DOC/DOCX. The portal records the uploaded filename and updates ATS analysis.</p>
+            <label class="upload-box"><input type="file" accept=".pdf,.doc,.docx" file-change="portal.uploadResume($file)" ng-disabled="portal.resumeUploading" /><strong>{{portal.resumeUploading ? 'Uploading…' : 'Choose a resume file'}}</strong><span>{{portal.profile.resumeFileName || 'No resume uploaded'}}</span></label>
+            <p class="feedback" ng-if="portal.resumeFeedback">{{portal.resumeFeedback}}</p>
+            <div class="score-card"><span>ATS readiness</span><strong>{{portal.profile.resumeAtsScore || 92}}%</strong><div class="meter"><i ng-style="{width: (portal.profile.resumeAtsScore || 92) + '%'}"></i></div></div>
+            <h3>Detected skills</h3><div class="tag-list"><span class="tag" ng-repeat="skill in portal.profile.resumeParsedSkills">{{skill}}</span></div>
+          </section>
+          <section class="panel" ng-if="!portal.editingProfile">
+            <h2>{{portal.profile.name}}</h2><p>{{portal.profile.degree}} · {{portal.profile.batch}}</p><p>{{portal.profile.email}} · {{portal.profile.phone}}</p><p>{{portal.profile.branch}} · CGPA {{portal.profile.cgpa}}</p>
+            <p class="resume-summary">{{portal.profile.resumeSummary}}</p>
+            <h3>Skills</h3><div class="tag-list"><span class="tag" ng-repeat="skill in portal.profile.skills">{{skill}}</span></div>
+            <div class="link-list"><a ng-if="portal.profile.linkedin" ng-href="{{portal.profile.linkedin}}" target="_blank" rel="noopener">LinkedIn</a><a ng-if="portal.profile.github" ng-href="{{portal.profile.github}}" target="_blank" rel="noopener">GitHub</a><a ng-if="portal.profile.portfolio" ng-href="{{portal.profile.portfolio}}" target="_blank" rel="noopener">Portfolio</a></div>
+            <h3>Experience</h3><div class="resume-item" ng-repeat="item in portal.profile.experience"><strong>{{item.role}} · {{item.company}}</strong><span>{{item.duration}}</span><p>{{item.summary}}</p></div>
+            <h3>Education</h3><div class="resume-item" ng-repeat="item in portal.profile.education"><strong>{{item.degree}}</strong><span>{{item.institution}} · {{item.year}} · {{item.score}}</span></div>
+          </section>
+          <form class="panel form-stack" ng-if="portal.editingProfile" ng-submit="portal.saveProfile()">
+            <h2>Edit profile and resume details</h2>
+            <label>Full name<input ng-model="portal.profileForm.name" required /></label>
+            <label>Phone<input ng-model="portal.profileForm.phone" /></label>
+            <label>LinkedIn URL<input ng-model="portal.profileForm.linkedin" type="url" /></label>
+            <label>GitHub URL<input ng-model="portal.profileForm.github" type="url" /></label>
+            <label>Skills (comma-separated)<input ng-model="portal.profileForm.skills" /></label>
+            <label>Resume summary<textarea ng-model="portal.profileForm.resumeSummary" rows="4"></textarea></label>
+            <button class="button button-primary" type="submit">Save profile</button>
+          </form>
+        </div>
+      </section>
+
+      <section ng-if="!portal.loading && portal.activeTab === 'tpo'">
+        <div class="section-header">
+          <div class="director-heading"><img src="/images/director_avatar_1793863944316.jpg" alt="" /><div><p class="eyebrow">Training &amp; Placement Office Administration</p><h1>Campus recruitment control center</h1><p class="muted">Coordinate placement drives, review applicants, and oversee interview schedules.</p></div></div>
+          <div class="card-actions"><button class="button button-muted" ng-click="portal.openSlotForm()">Generate slots</button><button class="button button-primary" ng-click="portal.driveModalOpen = true">Post new drive</button></div>
+        </div>
+        <div class="kpi-grid">
+          <div class="kpi-card"><span>Placement rate</span><strong>{{portal.stats.placementRate || 92}}%</strong><small>{{portal.stats.placedStudents || 368}} students placed</small></div>
+          <div class="kpi-card"><span>Average CTC</span><strong>{{portal.stats.averageCtc || '16.4 LPA'}}</strong><small>Across all programs</small></div>
+          <div class="kpi-card"><span>Highest package</span><strong>{{portal.stats.highestCtc || '54.0 LPA'}}</strong><small>Campus recruitment</small></div>
+          <div class="kpi-card"><span>Drives · interview slots</span><strong>{{portal.jobs.length}} · {{portal.slots.length}}</strong><small>{{portal.bookedSlotCount()}} booked</small></div>
+        </div>
+        <div class="segmented tpo-tabs">
+          <button ng-repeat="tab in portal.tpoTabs" ng-class="{selected: portal.tpoTab === tab.id}" ng-click="portal.tpoTab = tab.id">{{tab.label}}</button>
+        </div>
+        <section class="panel table-panel" ng-if="portal.tpoTab === 'applicants'">
+          <div class="panel-toolbar"><h2>Manage applicants</h2><select ng-model="portal.applicantJobFilter"><option value="All">All companies</option><option ng-repeat="job in portal.jobs" value="{{job.id}}">{{job.companyName}} · {{job.role}}</option></select></div>
+          <div class="table-wrap"><table><thead><tr><th>Student</th><th>Department · CGPA</th><th>Company · role</th><th>Status</th><th>Decision</th></tr></thead>
+            <tbody><tr ng-repeat="app in portal.filteredApplicantRows()"><td><strong>{{app.studentName}}</strong><small>{{app.studentRoll}} · {{app.studentEmail}}</small></td><td>{{app.studentBranch}}<small>{{app.studentCgpa}} CGPA</small></td><td>{{app.companyName}}<small>{{app.jobRole}}</small></td><td><span class="status-pill" ng-class="portal.statusClass(app.status)">{{app.status}}</span></td><td class="table-actions"><button class="text-button" ng-if="app.status !== 'Shortlisted' && app.status !== 'Interview Scheduled'" ng-click="portal.updateStatus(app, 'Shortlisted')">Shortlist</button><button class="text-button purple-text" ng-if="app.status !== 'Offer Extended' && app.status !== 'Offer Accepted'" ng-click="portal.updateStatus(app, 'Offer Extended')">Extend offer</button><button class="text-button danger-text" ng-if="app.status !== 'Rejected'" ng-click="portal.updateStatus(app, 'Rejected')">Reject</button></td></tr></tbody>
+          </table></div><p class="muted" ng-if="!portal.filteredApplicantRows().length">No applicants for this drive yet.</p>
+        </section>
+        <section class="panel table-panel" ng-if="portal.tpoTab === 'drives'">
+          <div class="panel-toolbar"><h2>Campus drives</h2><button class="button button-primary" ng-click="portal.driveModalOpen = true">Post drive</button></div>
+          <div class="table-wrap"><table><thead><tr><th>Company</th><th>Role</th><th>Package</th><th>Deadline</th><th>Status</th><th></th></tr></thead><tbody><tr ng-repeat="job in portal.jobs"><td>{{job.companyName}}</td><td>{{job.role}}</td><td>{{job.ctc}}</td><td>{{job.deadline | date:'MMM d, yyyy'}}</td><td>{{job.status}}</td><td><button class="text-button danger-text" ng-click="portal.deleteDrive(job)">Remove</button></td></tr></tbody></table></div>
+        </section>
+        <section class="panel table-panel" ng-if="portal.tpoTab === 'slots'">
+          <div class="panel-toolbar"><h2>Interview slot directory</h2><button class="button button-primary" ng-click="portal.openSlotForm()">Create slot</button></div>
+          <div class="table-wrap"><table><thead><tr><th>Company · round</th><th>Date · time</th><th>Interviewer</th><th>Reservation</th></tr></thead><tbody><tr ng-repeat="slot in portal.slots"><td>{{slot.companyName}}<small>{{slot.roundName}}</small></td><td>{{slot.date | date:'MMM d, yyyy'}} · {{slot.startTime}}–{{slot.endTime}}</td><td>{{slot.interviewerName}}</td><td>{{slot.isBooked ? slot.bookedByStudentName : 'Available'}}</td></tr></tbody></table></div>
+        </section>
+        <section class="panel table-panel" ng-if="portal.tpoTab === 'analytics'">
+          <h2>Department analytics</h2>
+          <div class="table-wrap"><table><thead><tr><th>Branch</th><th>Eligible</th><th>Placed</th><th>Placement rate</th><th>Average CTC</th></tr></thead><tbody><tr ng-repeat="branch in portal.stats.branchStats"><td>{{branch.branch}}</td><td>{{branch.total}}</td><td>{{branch.placed}}</td><td>{{branch.rate}}%</td><td>{{branch.avgCtc}}</td></tr></tbody></table></div>
+          <p class="muted" ng-if="!portal.stats.branchStats.length">Branch analytics are not available yet.</p>
+        </section>
+      </section>
+    </main>
+
+    <footer class="footer"><strong>NexPlacement</strong><span>University Training &amp; Placement Cell</span><button class="text-button" ng-click="portal.deployModalOpen = true">Deployment guide</button><span>Node.js &amp; MongoDB Ready · Batch of 2026</span></footer>
+
+    <div class="modal-backdrop" ng-if="portal.selectedDrive" ng-click="portal.selectedDrive = null">
+      <section class="modal drive-modal" role="dialog" aria-modal="true" aria-labelledby="drive-title" ng-click="$event.stopPropagation()">
+        <div class="modal-heading"><div><p class="eyebrow">{{portal.selectedDrive.companyName}} · {{portal.selectedDrive.jobType}} · {{portal.selectedDrive.workMode}}</p><h2 id="drive-title">{{portal.selectedDrive.role}}</h2><strong class="package-text">{{portal.selectedDrive.ctc}}</strong></div><button class="close-button" ng-click="portal.selectedDrive = null" aria-label="Close">×</button></div>
+        <div class="modal-content">
+          <div class="notice-panel" ng-class="portal.isEligible(portal.selectedDrive) ? 'success-panel' : 'warning-panel'">{{portal.isEligible(portal.selectedDrive) ? 'You meet the eligibility criteria.' : 'You do not currently meet all eligibility criteria.'}} Minimum CGPA: {{portal.selectedDrive.minCgpa}} · Your CGPA: {{portal.profile.cgpa}} · Eligible branches: {{portal.selectedDrive.eligibleBranches.join(', ')}}</div>
+          <div class="detail-grid"><div><small>Location</small><strong>{{portal.selectedDrive.location}}</strong></div><div><small>Application deadline</small><strong>{{portal.selectedDrive.deadline | date:'MMM d, yyyy'}}</strong></div><div><small>Campus drive date</small><strong>{{portal.selectedDrive.driveDate | date:'MMM d, yyyy'}}</strong></div><div><small>Open positions</small><strong>{{portal.selectedDrive.openPositions}}</strong></div></div>
+          <h3>Role overview</h3><p>{{portal.selectedDrive.description}}</p>
+          <h3>Selection rounds</h3><ol class="round-list"><li ng-repeat="round in portal.selectedDrive.rounds">{{round}}</li></ol>
+          <div ng-if="portal.applicationFor(portal.selectedDrive.id)" class="notice-panel">Application status: <strong>{{portal.applicationFor(portal.selectedDrive.id).status}}</strong></div>
+          <form class="form-stack" ng-if="!portal.applicationFor(portal.selectedDrive.id)" ng-submit="portal.applyToDrive()">
+            <label>Optional note to the placement coordinator<textarea ng-model="portal.candidateNotes" rows="3" placeholder="Highlight relevant projects, skills, or certifications"></textarea></label>
+            <p class="muted">Resume: {{portal.profile.resumeFileName || 'Resume.pdf'}} · ATS match: {{portal.profile.resumeAtsScore || 90}}%</p>
+            <p class="error-text" ng-if="portal.modalError">{{portal.modalError}}</p>
+            <div class="card-actions"><button type="button" class="button button-muted" ng-click="portal.selectedDrive = null">Cancel</button><button type="submit" class="button button-primary" ng-disabled="portal.actionBusy || !portal.profile || !portal.isEligible(portal.selectedDrive)">{{portal.actionBusy ? 'Submitting…' : 'Apply for campus drive'}}</button></div>
+          </form>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal-backdrop" ng-if="portal.driveModalOpen" ng-click="portal.driveModalOpen = false">
+      <form class="modal form-stack" ng-submit="portal.postDrive()" ng-click="$event.stopPropagation()">
+        <div class="modal-heading"><h2>Publish campus placement drive</h2><button type="button" class="close-button" ng-click="portal.driveModalOpen = false">×</button></div>
+        <label>Company name<input ng-model="portal.driveForm.companyName" required /></label>
+        <label>Role title<input ng-model="portal.driveForm.role" required /></label>
+        <div class="form-row"><label>Job type<select ng-model="portal.driveForm.jobType"><option>Full Time</option><option>Internship</option><option>Intern + PPO</option></select></label><label>CTC package<input ng-model="portal.driveForm.ctc" required /></label></div>
+        <div class="form-row"><label>Location<input ng-model="portal.driveForm.location" required /></label><label>Work mode<select ng-model="portal.driveForm.workMode"><option>On-site</option><option>Hybrid</option><option>Remote</option></select></label></div>
+        <div class="form-row"><label>Minimum CGPA<input type="number" step="0.1" min="0" max="10" ng-model="portal.driveForm.minCgpa" required /></label><label>Open positions<input type="number" min="1" ng-model="portal.driveForm.openPositions" required /></label></div>
+        <label>Eligible branches (comma-separated)<input ng-model="portal.driveForm.eligibleBranches" required /></label>
+        <div class="form-row"><label>Application deadline<input type="date" ng-model="portal.driveForm.deadline" required /></label><label>Drive date<input type="date" ng-model="portal.driveForm.driveDate" required /></label></div>
+        <label>Job description<textarea ng-model="portal.driveForm.description" rows="3" required></textarea></label>
+        <label>Selection rounds (comma-separated)<input ng-model="portal.driveForm.rounds" required /></label>
+        <label>Tags (comma-separated)<input ng-model="portal.driveForm.tags" /></label>
+        <p class="error-text" ng-if="portal.formError">{{portal.formError}}</p><div class="card-actions"><button type="button" class="button button-muted" ng-click="portal.driveModalOpen = false">Cancel</button><button type="submit" class="button button-primary" ng-disabled="portal.actionBusy">Publish drive</button></div>
+      </form>
+    </div>
+
+    <div class="modal-backdrop" ng-if="portal.slotModalOpen" ng-click="portal.slotModalOpen = false">
+      <form class="modal form-stack" ng-submit="portal.createSlot()" ng-click="$event.stopPropagation()">
+        <div class="modal-heading"><h2>Create interview slot</h2><button type="button" class="close-button" ng-click="portal.slotModalOpen = false">×</button></div>
+        <label>Campus drive<select ng-model="portal.slotForm.jobId" ng-options="job.id as (job.companyName + ' · ' + job.role) for job in portal.jobs" required></select></label>
+        <label>Interview round<input ng-model="portal.slotForm.roundName" required /></label>
+        <label>Interviewer<input ng-model="portal.slotForm.interviewerName" required /></label>
+        <label>Interviewer role<input ng-model="portal.slotForm.interviewerRole" required /></label>
+        <div class="form-row"><label>Date<input type="date" ng-model="portal.slotForm.date" required /></label><label>Duration (minutes)<input type="number" min="1" ng-model="portal.slotForm.durationMinutes" required /></label></div>
+        <div class="form-row"><label>Start time<input ng-model="portal.slotForm.startTime" placeholder="10:00 AM" required /></label><label>End time<input ng-model="portal.slotForm.endTime" placeholder="10:45 AM" required /></label></div>
+        <label>Meeting link<input type="url" ng-model="portal.slotForm.meetingLink" /></label><label>Room / location<input ng-model="portal.slotForm.roomNumber" /></label>
+        <p class="error-text" ng-if="portal.formError">{{portal.formError}}</p><div class="card-actions"><button type="button" class="button button-muted" ng-click="portal.slotModalOpen = false">Cancel</button><button type="submit" class="button button-primary" ng-disabled="portal.actionBusy || !portal.jobs.length">Create slot</button></div>
+      </form>
+    </div>
+
+    <div class="modal-backdrop" ng-if="portal.deployModalOpen" ng-click="portal.deployModalOpen = false">
+      <section class="modal" role="dialog" aria-modal="true" ng-click="$event.stopPropagation()">
+        <div class="modal-heading"><h2>Deploy NexPlacement</h2><button class="close-button" ng-click="portal.deployModalOpen = false">×</button></div>
+        <div class="modal-content"><p>Deploy the Node.js service on Render and configure a MongoDB connection for persistent placement data.</p><ol><li>Add <code>MONGODB_URI</code> as a Render environment variable.</li><li>Set the service start command to <code>npm start</code>.</li><li>Confirm the health check at <code>/api/health</code>.</li></ol></div>
+      </section>
+    </div>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.3/angular.min.js"></script>
+    <script type="module" src="/src/app.js"></script>
   </body>
 </html>
-
