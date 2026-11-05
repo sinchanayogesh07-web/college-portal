@@ -1,0 +1,6 @@
+{
+  "name": "Campus Placement Cell Portal",
+  "description": "Comprehensive university campus placement portal for students to upload resumes, track job applications, and schedule interview slots with full-stack Node.js and MongoDB support.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: campus-placement-portal
+    env: node
+    plan: free
+    region: oregon
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: MONGODB_URI
+        sync: false
+        # Tip: Set your MongoDB Atlas connection string in the Render Dashboard (Environment tab)
+        # e.g.: mongodb+srv://<user>:<password>@cluster0.abcde.mongodb.net/placement_db?retryWrites=true&w=majority
