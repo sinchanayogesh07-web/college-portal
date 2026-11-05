@@ -1,6 +1,6 @@
 # NexPlacement Campus Placement Portal
 
-The client is a single-page AngularJS 1.8 application built with semantic HTML, CSS, and JavaScript. The existing Express API and optional MongoDB persistence remain in place.
+The client is a single-page application built with semantic HTML, separate CSS, and vanilla JavaScript. The Express API and optional MongoDB persistence remain in place. The Node.js server and shared data models continue to use TypeScript.
 
 ## Run locally
 
@@ -9,7 +9,7 @@ The client is a single-page AngularJS 1.8 application built with semantic HTML, 
 3. Start the app with `npm run dev`.
 4. Open `http://localhost:3000`.
 
-AngularJS is loaded from the Google Hosted Libraries CDN. The frontend calls the Express API at `/api`.
+The frontend has no UI framework runtime or frontend build dependency beyond Vite. It calls the Express API at `/api`.
 
 ## Production build
 
