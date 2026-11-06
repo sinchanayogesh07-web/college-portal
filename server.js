@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import { supabase } from './server/supabase.js';
 import { initDatabase, getDbConnectionStatus, getJobsDAL, createJobDAL, updateJobDAL, deleteJobDAL, getApplicationsDAL, createApplicationDAL, updateApplicationStatusDAL, getInterviewSlotsDAL, createInterviewSlotDAL, bookInterviewSlotDAL, cancelInterviewSlotDAL, getStudentProfileDAL, updateStudentProfileDAL, getPlacementStatsDAL } from './server/db.js';
 dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
@@ -17,27 +18,26 @@ async function startServer() {
         extended: true,
         limit: '10mb'
     }));
-    await initDatabase();
-    app.get('/api/health', (_req, res)=>{
-        res.json({
-            status: 'healthy',
-            app: 'Campus Placement Cell Job Portal',
-            serverTime: new Date().toISOString()
-        });
+   await initDatabase();
+
+app.get('/api/supabase-health', async (req, res) => {
+  const { data, error } = await supabase
+    .from('jobs')
+    .select('id')
+    .limit(1);
+
+  if (error) {
+    return res.status(500).json({
+      connected: false,
+      error: error.message
     });
-    app.get('/api/db-status', (_req, res)=>{
-        res.json(getDbConnectionStatus());
-    });
-    app.get('/api/profile', async (_req, res)=>{
-        try {
-            const profile = await getStudentProfileDAL();
-            res.json(profile);
-        } catch (err) {
-            res.status(500).json({
-                error: err.message
-            });
-        }
-    });
+  }
+
+  res.json({
+    connected: true,
+    message: 'Supabase connection successful'
+  });
+});
     app.put('/api/profile', async (req, res)=>{
         try {
             const updated = await updateStudentProfileDAL(req.body);

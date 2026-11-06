@@ -1,4 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
+import { supabase } from './supabase.js';
 const JobSchema = new Schema({
     customId: {
         type: String,
@@ -879,89 +880,61 @@ async function seedMongoIfEmpty() {
     }
 }
 export async function getJobsDAL(search, branch, type) {
-    if (isMongoConnected) {
-        try {
-            const query = {};
-            if (branch && branch !== 'All') {
-                query.eligibleBranches = {
-                    $in: [
-                        branch,
-                        'All Branches',
-                        'Computer Science & Engineering'
-                    ]
-                };
-            }
-            if (type && type !== 'All') {
-                query.jobType = type;
-            }
-            const docs = await JobModel.find(query).sort({
-                createdAt: -1
-            });
-            let results = docs.map((doc)=>({
-                    id: doc.customId,
-                    companyName: doc.companyName,
-                    companyLogo: doc.companyLogo,
-                    role: doc.role,
-                    jobType: doc.jobType,
-                    ctc: doc.ctc,
-                    location: doc.location,
-                    eligibleBranches: doc.eligibleBranches,
-                    minCgpa: doc.minCgpa,
-                    driveDate: doc.driveDate,
-                    deadline: doc.deadline,
-                    description: doc.description,
-                    rounds: doc.rounds,
-                    selectionProcess: doc.selectionProcess || '',
-                    workMode: doc.workMode,
-                    openPositions: doc.openPositions,
-                    tags: doc.tags,
-                    status: doc.status,
-                    createdAt: doc.createdAt
-                }));
-            if (search) {
-                const s = search.toLowerCase();
-                results = results.filter((j)=>j.companyName.toLowerCase().includes(s) || j.role.toLowerCase().includes(s));
-            }
-            return results;
-        } catch (e) {
-            console.warn('Falling back to memory jobs due to Mongo error:', e);
+    try {
+        const { data, error } = await supabase
+            .from('jobs')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        let results = (data || []).map((job) => ({
+            id: job.id,
+            companyName: job.company_name,
+            companyLogo: job.company_logo,
+            role: job.job_title,
+            jobType: job.job_type,
+            ctc: job.ctc,
+            location: job.location,
+            eligibleBranches: job.eligible_branches || [],
+            minCgpa: job.min_cgpa,
+            driveDate: job.drive_date,
+            deadline: job.application_deadline,
+            description: job.description,
+            rounds: job.rounds || [],
+            selectionProcess: job.selection_process || '',
+            workMode: job.work_mode,
+            openPositions: job.open_positions,
+            tags: job.tags || [],
+            status: job.status,
+            createdAt: job.created_at
+        }));
+
+        if (branch && branch !== 'All') {
+            results = results.filter((job) =>
+                job.eligibleBranches.includes(branch) ||
+                job.eligibleBranches.includes('All Branches')
+            );
         }
-    }
-    let list = [
-        ...memoryJobs
-    ];
-    if (branch && branch !== 'All') {
-        list = list.filter((j)=>j.eligibleBranches.includes(branch) || j.eligibleBranches.includes('All Branches'));
-    }
-    if (type && type !== 'All') {
-        list = list.filter((j)=>j.jobType === type);
-    }
-    if (search) {
-        const s = search.toLowerCase();
-        list = list.filter((j)=>j.companyName.toLowerCase().includes(s) || j.role.toLowerCase().includes(s));
-    }
-    return list;
-}
-export async function createJobDAL(jobData) {
-    const newId = `drive-${Date.now()}`;
-    const newDrive = {
-        ...jobData,
-        id: newId,
-        createdAt: new Date().toISOString()
-    };
-    if (isMongoConnected) {
-        try {
-            await JobModel.create({
-                ...newDrive,
-                customId: newId
-            });
-        } catch (e) {
-            console.warn('Mongo insert error, updating memory store:', e);
+
+        if (type && type !== 'All') {
+            results = results.filter((job) => job.jobType === type);
         }
-    }
-    memoryJobs.unshift(newDrive);
-    return newDrive;
+
+        if (search) {
+            const s = search.toLowerCase();
+            results = results.filter((job) =>
+                (job.companyName || '').toLowerCase().includes(s) ||
+                (job.role || '').toLowerCase().includes(s)
+            );
+        }
+
+        return results;
+    } catch (error) {
+    return [{ debugError: error.message }];
 }
+}
+
 export async function updateJobDAL(id, updates) {
     if (isMongoConnected) {
         try {
@@ -984,6 +957,7 @@ export async function updateJobDAL(id, updates) {
     }
     return null;
 }
+
 export async function deleteJobDAL(id) {
     if (isMongoConnected) {
         try {
@@ -1307,6 +1281,35 @@ export async function updateStudentProfileDAL(updates) {
         }
     }
     return memoryProfile;
+}
+export async function createJobDAL(job) {
+    const { data, error } = await supabase
+        .from('jobs')
+        .insert({
+            company_name: job.companyName,
+            job_title: job.role,
+            description: job.description || '',
+            eligibility: job.eligibility || '',
+            application_deadline: job.deadline || null,
+            company_logo: job.companyLogo || '',
+            job_type: job.jobType || '',
+            ctc: job.ctc || '',
+            location: job.location || '',
+            eligible_branches: job.eligibleBranches || [],
+            min_cgpa: job.minCgpa ?? null,
+            drive_date: job.driveDate || null,
+            rounds: job.rounds || [],
+            selection_process: job.selectionProcess || '',
+            work_mode: job.workMode || 'On-site',
+            open_positions: job.openPositions ?? 5,
+            tags: job.tags || [],
+            status: 'active'
+        })
+        .select()
+        .single();
+
+    if (error) throw error;
+    return data;
 }
 export async function getPlacementStatsDAL() {
     const total = 420;
